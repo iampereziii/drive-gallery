@@ -26,10 +26,19 @@ export interface CullManifest {
   root: string;
   /** Keyed by posix relative path from root — same as ImageEntry.path. */
   items: Record<string, { tag: CullTag; taggedAt: string }>;
+  /** Optional Like goal the owner is trimming toward (positive integer). */
+  goal?: number;
 }
 
-/** Drive-wide tag totals (GET /api/culls/summary). */
-export type CullSummary = Record<CullTag, number>;
+/** Drive-wide tag totals plus the optional Like goal (GET /api/culls/summary). */
+export type CullSummary = Record<CullTag, number> & { goal?: number };
+
+/** Largest Like goal accepted — well above any real library. */
+export const MAX_LIKE_GOAL = 100_000;
+
+export function isLikeGoal(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= MAX_LIKE_GOAL;
+}
 
 /** Every image with one tag, across all folders (GET /api/culls?tag=…). */
 export interface TaggedImages {

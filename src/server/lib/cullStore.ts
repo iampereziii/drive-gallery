@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isCullTag, type CullManifest, type CullSummary, type CullTag } from '../../types';
+import { isCullTag, isLikeGoal, type CullManifest, type CullSummary, type CullTag } from '../../types';
 
 /**
  * Holds the owner's culling tags in memory and persists them to CULL_FILE.
@@ -13,6 +13,7 @@ import { isCullTag, type CullManifest, type CullSummary, type CullTag } from '..
  */
 export class CullStore {
   private items: CullManifest['items'] = {};
+  private goal: number | undefined;
   private queue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -41,6 +42,8 @@ export class CullStore {
     if (typeof items !== 'object' || items === null) {
       throw new Error(`CULL_FILE has no "items" object: ${this.file}. Fix or move it aside, then restart.`);
     }
+    const goal = (parsed as { goal?: unknown }).goal;
+    if (isLikeGoal(goal)) this.goal = goal;
     for (const [rel, entry] of Object.entries(items as Record<string, unknown>)) {
       const tag = (entry as { tag?: unknown } | null)?.tag;
       const taggedAt = (entry as { taggedAt?: unknown } | null)?.taggedAt;
@@ -54,6 +57,7 @@ export class CullStore {
   summary(): CullSummary {
     const out: CullSummary = { like: 0, maybe: 0, no: 0 };
     for (const { tag } of Object.values(this.items)) out[tag] += 1;
+    if (this.goal !== undefined) out.goal = this.goal;
     return out;
   }
 
@@ -77,16 +81,30 @@ export class CullStore {
       const next = { ...this.items };
       if (tag === null) delete next[rel];
       else next[rel] = { tag, taggedAt: new Date().toISOString() };
-      await this.write(next);
+      await this.write(next, this.goal);
       this.items = next;
     };
+    return this.enqueue(run);
+  }
+
+  /** Set (or clear, with null) the Like goal and persist. */
+  setGoal(goal: number | null): Promise<void> {
+    return this.enqueue(async () => {
+      const next = goal ?? undefined;
+      await this.write(this.items, next);
+      this.goal = next;
+    });
+  }
+
+  /** Run writes one at a time; a failed write doesn't block later ones. */
+  private enqueue(run: () => Promise<void>): Promise<void> {
     const result = this.queue.then(run);
-    this.queue = result.catch(() => undefined); // keep the chain alive after a failure
+    this.queue = result.catch(() => undefined);
     return result;
   }
 
-  private async write(items: CullManifest['items']): Promise<void> {
-    const manifest: CullManifest = { version: 1, root: this.root, items };
+  private async write(items: CullManifest['items'], goal: number | undefined): Promise<void> {
+    const manifest: CullManifest = { version: 1, root: this.root, ...(goal !== undefined ? { goal } : {}), items };
     await fs.promises.mkdir(path.dirname(this.file), { recursive: true });
     const tmp = `${this.file}.${process.pid}.tmp`;
     await fs.promises.writeFile(tmp, JSON.stringify(manifest, null, 2), 'utf8');

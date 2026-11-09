@@ -7,11 +7,12 @@ import { sendError, driveAvailable } from '../lib/http';
 import { realResolveWithin, PathError } from '../lib/safePath';
 import { isImage } from '../lib/imageTypes';
 import { listTagged } from '../lib/listing';
-import { isCullTag, type CullSummary, type CullUpdateResult, type TaggedImages } from '../../types';
+import { isCullTag, isLikeGoal, MAX_LIKE_GOAL, type CullSummary, type CullUpdateResult, type TaggedImages } from '../../types';
 
 /**
  * GET  /api/culls/summary — drive-wide totals per tag.
  * GET  /api/culls?tag=like — every image with that tag, across all folders.
+ * PUT  /api/culls/goal — set or clear the Like goal ({ goal: number | null }).
  * PUT  /api/culls — set or clear one image's culling tag.
  * Body: { path: string, tag: 'like' | 'maybe' | 'no' | null }.
  * Only CULL_FILE is written; the image itself is only stat'ed, never opened.
@@ -20,6 +21,22 @@ export function cullsRouter(config: Config, store: CullStore): Router {
   const r = Router();
 
   r.get('/summary', (_req, res) => {
+    const data: CullSummary = store.summary();
+    res.json({ data });
+  });
+
+  // The goal lives only in CULL_FILE (off the drive), so no drive check is needed.
+  r.put('/goal', async (req, res) => {
+    const goal = (req.body as { goal?: unknown } | undefined)?.goal;
+    if (goal !== null && !isLikeGoal(goal)) {
+      return sendError(res, 400, 'INVALID_GOAL', `goal must be a whole number from 1 to ${MAX_LIKE_GOAL}, or null.`);
+    }
+    try {
+      await store.setGoal(goal);
+    } catch (err) {
+      console.error('[culls]', err);
+      return sendError(res, 500, 'INTERNAL', 'Could not save the goal.');
+    }
     const data: CullSummary = store.summary();
     res.json({ data });
   });

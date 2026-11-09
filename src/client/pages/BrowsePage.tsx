@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import type { CullSummary, CullTag, DirListing, ImageEntry } from '../../types';
-import { fetchCullSummary, fetchListing, fetchTagged, pathFromRoute, routeForPath, setCull } from '../lib/api';
-import { FILTERS, matchesFilter, type CullFilter } from '../lib/cull';
+import { fetchCullSummary, fetchListing, fetchTagged, pathFromRoute, routeForPath, setCull, setLikeGoal } from '../lib/api';
+import { FILTERS, goalMet, likesLabel, likesPillClass, matchesFilter, type CullFilter } from '../lib/cull';
+import LikeGoal from '../components/LikeGoal';
 import Breadcrumb from '../components/Breadcrumb';
 import FolderGrid from '../components/FolderGrid';
 import Lightbox from '../components/Lightbox';
@@ -130,9 +131,10 @@ export default function BrowsePage() {
           {summary && !likesMode && (
             <Link
               to={LIKES_ROUTE}
-              className="shrink-0 rounded-full bg-emerald-500/15 px-3 py-1.5 text-sm font-medium text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25"
+              className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium ring-1 hover:brightness-125 ${likesPillClass(summary.like, summary.goal)}`}
             >
-              ♥ {summary.like} liked ›
+              {likesLabel(summary.like, summary.goal)}
+              {goalMet(summary.like, summary.goal) ? ' ✓' : summary.goal === undefined ? ' liked' : ''} ›
             </Link>
           )}
         </div>
@@ -140,9 +142,11 @@ export default function BrowsePage() {
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-neutral-400">
             <Link to={routeForPath('')} className="hover:text-neutral-100">‹ Back to folders</Link>
             {summary && (
-              <span>
-                <span className="text-2xl font-semibold text-emerald-300">♥ {summary.like}</span> liked across all folders
-              </span>
+              <LikeGoal
+                like={summary.like}
+                goal={summary.goal}
+                onSave={async (goal) => setSummary(await setLikeGoal(goal))}
+              />
             )}
           </div>
         ) : (
@@ -199,6 +203,7 @@ export default function BrowsePage() {
           onChange={(index) => setViewer((v) => (v ? { ...v, index } : v))}
           onTag={onTag}
           likeCount={summary?.like}
+          likeGoal={summary?.goal}
           showPath={likesMode}
         />
       )}

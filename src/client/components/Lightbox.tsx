@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type TouchEvent } from 'react';
 import { CULL_TAGS, type CullTag, type ImageEntry } from '../../types';
 import { isIOS, canShareFiles } from '../lib/platform';
 import { shareImages } from '../lib/share';
-import { TAG_META } from '../lib/cull';
+import { TAG_META, goalMet, likesLabel, likesPillClass } from '../lib/cull';
+import { useMediaQuery } from '../lib/useMediaQuery';
+import ThumbStrip from './ThumbStrip';
 
 interface Props {
   images: ImageEntry[];
@@ -13,6 +15,8 @@ interface Props {
   onTag: (image: ImageEntry, tag: CullTag | null) => void;
   /** Drive-wide Like total, shown live in the top bar while trimming. */
   likeCount?: number;
+  /** Optional Like goal, shown as ♥ count / goal. */
+  likeGoal?: number;
   /** Show the folder path instead of just the file name (All Likes view). */
   showPath?: boolean;
 }
@@ -20,12 +24,31 @@ interface Props {
 /** How long the chosen tag flashes before the viewer advances. */
 const ADVANCE_MS = 300;
 
+/** Per-device memory of the strip toggle (shown by default). */
+const STRIP_KEY = 'dg.viewer.thumbStrip';
+
+function readStripPref(): boolean {
+  try {
+    return window.localStorage.getItem(STRIP_KEY) !== 'hidden';
+  } catch {
+    return true;
+  }
+}
+
+function writeStripPref(shown: boolean): void {
+  try {
+    window.localStorage.setItem(STRIP_KEY, shown ? 'shown' : 'hidden');
+  } catch {
+    // private mode / blocked storage — the toggle still works for this visit
+  }
+}
+
 // Computed once — platform capability doesn't change within a session.
 const SHARE_AVAILABLE = canShareFiles();
 const IS_IOS = isIOS();
 
 /** Full-screen viewer with keyboard, button, and swipe navigation. */
-export default function Lightbox({ images, index, onClose, onChange, onTag, likeCount, showPath }: Props) {
+export default function Lightbox({ images, index, onClose, onChange, onTag, likeCount, likeGoal, showPath }: Props) {
   const touchStartX = useRef<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -33,6 +56,9 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
   const [sharing, setSharing] = useState(false);
   const [flash, setFlash] = useState<CullTag | null>(null);
   const advanceTimer = useRef<number | null>(null);
+  const [stripShown, setStripShown] = useState(readStripPref);
+  // Upright phone → row above the tag bar; landscape or wide → column on the left.
+  const vertical = useMediaQuery('(orientation: landscape), (min-width: 768px)');
   const current = images[index];
 
   const prev = () => onChange((index - 1 + images.length) % images.length);
@@ -53,6 +79,19 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
   }, [index, current?.path]);
 
   useEffect(() => cancelAdvance, []);
+
+  const toggleStrip = () =>
+    setStripShown((s) => {
+      writeStripPref(!s);
+      return !s;
+    });
+
+  /** Jump from the strip. Cancels a pending auto-advance so it doesn't move on again. */
+  const jumpTo = (i: number) => {
+    cancelAdvance();
+    setFlash(null);
+    if (i !== index) onChange(i);
+  };
 
   /**
    * Tap a tag: tapping the active one clears it. Setting a tag flashes it, then
@@ -109,6 +148,9 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
     if (outcome === 'unsupported' || outcome === 'error') setHint(true);
   };
 
+  const showStrip = stripShown && images.length > 1;
+  const strip = <ThumbStrip images={images} index={index} onSelect={jumpTo} vertical={vertical} />;
+
   const iconClass = 'h-6 w-6';
   const downloadIcon = (
     <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -138,8 +180,12 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
           <span className="min-w-0 flex-1 truncate text-sm">{current.name}</span>
         )}
         {likeCount !== undefined && (
-          <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300" aria-label={`${likeCount} liked`}>
-            ♥ {likeCount}
+          <span
+            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${likesPillClass(likeCount, likeGoal)}`}
+            aria-label={likeGoal === undefined ? `${likeCount} liked` : `${likeCount} liked, goal ${likeGoal}`}
+          >
+            {likesLabel(likeCount, likeGoal)}
+            {goalMet(likeCount, likeGoal) && ' ✓'}
           </span>
         )}
         <span className="shrink-0 text-xs text-neutral-500">
@@ -179,6 +225,24 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
           </a>
         )}
 
+        {images.length > 1 && (
+          <button
+            type="button"
+            onClick={toggleStrip}
+            aria-pressed={stripShown}
+            className={`shrink-0 rounded p-1 hover:text-white ${stripShown ? 'text-white' : 'text-neutral-500'}`}
+            aria-label={stripShown ? 'Hide thumbnails' : 'Show thumbnails'}
+            title={stripShown ? 'Hide thumbnails' : 'Show thumbnails'}
+          >
+            <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </button>
+        )}
+
         <button type="button" onClick={onClose} className="shrink-0 rounded p-1 text-2xl leading-none hover:text-white" aria-label="Close">
           ×
         </button>
@@ -190,7 +254,9 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
         </div>
       )}
 
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden">
+      <div className={`flex min-h-0 flex-1 ${vertical ? 'flex-row' : 'flex-col'}`}>
+      {showStrip && vertical && strip}
+      <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
         {!loaded && !errored && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-label="Loading">
             <svg className="h-10 w-10 animate-spin text-neutral-400" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -241,6 +307,8 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
             </span>
           </div>
         )}
+      </div>
+      {showStrip && !vertical && strip}
       </div>
 
       {/* Culling bar — thumb zone, three large targets. Tap the active tag again to clear it. */}

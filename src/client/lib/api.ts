@@ -36,6 +36,18 @@ export function fetchCullSummary(): Promise<CullSummary> {
   return getData<CullSummary>('/api/culls/summary');
 }
 
+/** Set (or clear, with null) the Like goal. Returns fresh totals. */
+export async function setLikeGoal(goal: number | null): Promise<CullSummary> {
+  const res = await fetch('/api/culls/goal', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
+  return json.data as CullSummary;
+}
+
 /** Every image with `tag`, across all folders. */
 export function fetchTagged(tag: CullTag): Promise<TaggedImages> {
   return getData<TaggedImages>(`/api/culls?tag=${tag}`);

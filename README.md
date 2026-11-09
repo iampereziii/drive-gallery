@@ -56,7 +56,12 @@ On startup the server prints the LAN URL to open on your phone.
 2. In a folder, use the filter chips (**To review / Liked / Maybe / No**) for a second pass, e.g. go back
    through just the Maybes. Tags are saved on the host, so they survive reloads and show on every device.
    To trim your Likes, tap **♥ N liked ›** at the top: **All Likes** shows every Like from every folder in one
-   grid, and the ♥ count (also shown in the viewer) drops live as you tag photos No.
+   grid, and the ♥ count (also shown in the viewer) drops live as you tag photos No. Tap the big ♥ count there
+   to set a **goal** (e.g. 300): it shows as **♥ 412 / 300** everywhere, amber until you're at or under it.
+   The goal is saved on the host with your tags.
+   While judging, a **thumbnail strip** shows the photos around the current one (a row above the tag bar on an
+   upright phone, a column on the left when sideways or on a wider screen). Tap one to jump to it; the grid
+   button in the viewer's top bar hides or shows it.
 3. When you are done, copy your picks off the drive. The app itself never touches the photos:
 
 ```powershell

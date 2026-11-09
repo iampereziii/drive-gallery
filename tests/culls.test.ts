@@ -217,3 +217,38 @@ describe('loadConfig CULL_FILE', () => {
     expect(c.cullFile).toBe(path.resolve('.culls', 'culls.json'));
   });
 });
+
+describe('Like goal (PUT /api/culls/goal)', () => {
+  it('sets, reports, persists across restart, and clears the goal', async () => {
+    const app = buildApp(config);
+    await request(app).put('/api/culls').send({ path: 'trip/a.jpg', tag: 'like' });
+    const set = await request(app).put('/api/culls/goal').send({ goal: 300 });
+    expect(set.status).toBe(200);
+    expect(set.body.data).toEqual({ like: 1, maybe: 0, no: 0, goal: 300 });
+    expect(readManifest().goal).toBe(300);
+    expect(readManifest().items['trip/a.jpg'].tag).toBe('like'); // tags untouched
+
+    const restarted = buildApp(config);
+    expect((await request(restarted).get('/api/culls/summary')).body.data.goal).toBe(300);
+    // Tagging after a goal is set keeps the goal in the file.
+    await request(restarted).put('/api/culls').send({ path: 'trip/b.jpg', tag: 'like' });
+    expect(readManifest().goal).toBe(300);
+
+    const clear = await request(restarted).put('/api/culls/goal').send({ goal: null });
+    expect(clear.body.data).toEqual({ like: 2, maybe: 0, no: 0 });
+    expect(readManifest().goal).toBeUndefined();
+  });
+
+  it.each([0, -5, 2.5, '300', 100_001])('rejects goal %s with 400', async (goal) => {
+    const res = await request(buildApp(config)).put('/api/culls/goal').send({ goal });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_GOAL');
+  });
+
+  it('ignores an invalid goal in a hand-edited manifest instead of failing to start', async () => {
+    fs.mkdirSync(path.dirname(config.cullFile), { recursive: true });
+    fs.writeFileSync(config.cullFile, JSON.stringify({ version: 1, root, goal: -3, items: {} }));
+    const res = await request(buildApp(config)).get('/api/culls/summary');
+    expect(res.body.data).toEqual({ like: 0, maybe: 0, no: 0 });
+  });
+});
