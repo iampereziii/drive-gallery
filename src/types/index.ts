@@ -10,7 +10,33 @@ export interface FolderEntry {
   imageCount?: number;
 }
 
+/** Culling tag the owner gave an image in the viewer. Untagged = still to review. */
+export type CullTag = 'like' | 'maybe' | 'no';
+
+export const CULL_TAGS: readonly CullTag[] = ['no', 'maybe', 'like'];
+
+export function isCullTag(v: unknown): v is CullTag {
+  return v === 'like' || v === 'maybe' || v === 'no';
+}
+
+/** On-disk cull manifest (CULL_FILE). Read by scripts/apply-culls.ps1 to copy picks. */
+export interface CullManifest {
+  version: 1;
+  /** Absolute PHOTOS_ROOT the relative paths are under. */
+  root: string;
+  /** Keyed by posix relative path from root — same as ImageEntry.path. */
+  items: Record<string, { tag: CullTag; taggedAt: string }>;
+}
+
+/** Body of PUT /api/culls. `tag: null` clears the tag. */
+export interface CullUpdate {
+  path: string;
+  tag: CullTag | null;
+}
+
 export interface ImageEntry {
+  /** Culling tag, if the owner has tagged this image. */
+  tag?: CullTag;
   /** File name including extension. */
   name: string;
   /** Relative path from PHOTOS_ROOT, posix-style. */

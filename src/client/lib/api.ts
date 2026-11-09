@@ -1,4 +1,4 @@
-import type { DirListing, HealthInfo } from '../../types';
+import type { CullTag, CullUpdate, DirListing, HealthInfo } from '../../types';
 
 async function getData<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -16,6 +16,19 @@ export function browseUrl(relPath: string): string {
 
 export function fetchListing(relPath: string): Promise<DirListing> {
   return getData<DirListing>(browseUrl(relPath));
+}
+
+/** Set (or clear, with null) one image's culling tag. Saved on the host, not the phone. */
+export async function setCull(path: string, tag: CullTag | null): Promise<CullUpdate> {
+  const body: CullUpdate = { path, tag };
+  const res = await fetch('/api/culls', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
+  return json.data as CullUpdate;
 }
 
 export function fetchHealth(): Promise<HealthInfo> {

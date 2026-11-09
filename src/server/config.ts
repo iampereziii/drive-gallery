@@ -9,6 +9,14 @@ export interface Config {
   /** Absolute path to the thumbnail cache dir — guaranteed outside photosRoot. */
   thumbCacheDir: string;
   thumbMaxWidth: number;
+  /** Absolute path to the cull manifest JSON — guaranteed outside photosRoot. */
+  cullFile: string;
+}
+
+/** True if `target` is `root` itself or anywhere beneath it. */
+function isInside(root: string, target: string): boolean {
+  const rel = path.relative(root, target);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
 /**
@@ -36,10 +44,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const thumbCacheDir = path.resolve(env.THUMB_CACHE_DIR?.trim() || '.thumb-cache');
-  const relCache = path.relative(photosRoot, thumbCacheDir);
-  const insideRoot = relCache === '' || (!relCache.startsWith('..') && !path.isAbsolute(relCache));
-  if (insideRoot) {
+  if (isInside(photosRoot, thumbCacheDir)) {
     throw new Error('THUMB_CACHE_DIR must not be inside PHOTOS_ROOT (it would write onto the drive).');
+  }
+
+  const cullFile = path.resolve(env.CULL_FILE?.trim() || path.join('.culls', 'culls.json'));
+  if (isInside(photosRoot, cullFile)) {
+    throw new Error('CULL_FILE must not be inside PHOTOS_ROOT (it would write onto the drive).');
   }
 
   return {
@@ -48,5 +59,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     host: env.HOST?.trim() || '0.0.0.0',
     thumbCacheDir,
     thumbMaxWidth: Number(env.THUMB_MAX_WIDTH ?? 400),
+    cullFile,
   };
 }

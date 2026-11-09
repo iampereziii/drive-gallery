@@ -1,48 +1,90 @@
 import { useEffect, useRef, useState, type TouchEvent } from 'react';
-import type { ImageEntry } from '../../types';
+import { CULL_TAGS, type CullTag, type ImageEntry } from '../../types';
 import { isIOS, canShareFiles } from '../lib/platform';
 import { shareImages } from '../lib/share';
+import { TAG_META } from '../lib/cull';
 
 interface Props {
   images: ImageEntry[];
   index: number;
   onClose: () => void;
   onChange: (index: number) => void;
+  /** Set or clear (null) the culling tag for an image. */
+  onTag: (image: ImageEntry, tag: CullTag | null) => void;
 }
+
+/** How long the chosen tag flashes before the viewer advances. */
+const ADVANCE_MS = 300;
 
 // Computed once — platform capability doesn't change within a session.
 const SHARE_AVAILABLE = canShareFiles();
 const IS_IOS = isIOS();
 
 /** Full-screen viewer with keyboard, button, and swipe navigation. */
-export default function Lightbox({ images, index, onClose, onChange }: Props) {
+export default function Lightbox({ images, index, onClose, onChange, onTag }: Props) {
   const touchStartX = useRef<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
   const [hint, setHint] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [flash, setFlash] = useState<CullTag | null>(null);
+  const advanceTimer = useRef<number | null>(null);
   const current = images[index];
 
   const prev = () => onChange((index - 1 + images.length) % images.length);
   const next = () => onChange((index + 1) % images.length);
+
+  const cancelAdvance = () => {
+    if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current);
+    advanceTimer.current = null;
+  };
 
   // Reset per-image state whenever the displayed image changes (paging).
   useEffect(() => {
     setLoaded(false);
     setErrored(false);
     setHint(false);
+    setFlash(null);
+    cancelAdvance();
   }, [index, current?.path]);
+
+  useEffect(() => cancelAdvance, []);
+
+  /**
+   * Tap a tag: tapping the active one clears it. Setting a tag flashes it, then
+   * advances to the next photo (no wrap — the last photo stays put).
+   */
+  const applyTag = (t: CullTag) => {
+    if (!current) return;
+    const nextTag = current.tag === t ? null : t;
+    onTag(current, nextTag);
+    cancelAdvance();
+    if (nextTag === null) {
+      setFlash(null);
+      return;
+    }
+    setFlash(nextTag);
+    const at = index;
+    advanceTimer.current = window.setTimeout(() => {
+      advanceTimer.current = null;
+      setFlash(null);
+      if (at < images.length - 1) onChange(at + 1);
+    }, ADVANCE_MS);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       else if (e.key === 'ArrowLeft') prev();
       else if (e.key === 'ArrowRight') next();
+      else if (e.key === '1') applyTag('no');
+      else if (e.key === '2') applyTag('maybe');
+      else if (e.key === '3') applyTag('like');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, images.length]);
+  }, [index, images.length, current?.tag]);
 
   if (!current) return null;
 
@@ -174,6 +216,39 @@ export default function Lightbox({ images, index, onClose, onChange }: Props) {
             </button>
           </>
         )}
+
+        {flash && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-live="polite">
+            <span className={`rounded-full px-6 py-3 text-2xl font-semibold shadow-lg ${TAG_META[flash].active}`}>
+              {TAG_META[flash].symbol} {TAG_META[flash].label}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Culling bar — thumb zone, three large targets. Tap the active tag again to clear it. */}
+      <div
+        className="grid grid-cols-3 gap-2 px-3 pt-2"
+        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+      >
+        {CULL_TAGS.map((t) => {
+          const meta = TAG_META[t];
+          const active = current.tag === t;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => applyTag(t)}
+              aria-pressed={active}
+              className={`flex h-12 items-center justify-center gap-2 rounded-xl text-base font-semibold transition ${
+                active ? meta.active : 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'
+              }`}
+            >
+              <span aria-hidden>{meta.symbol}</span>
+              {meta.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

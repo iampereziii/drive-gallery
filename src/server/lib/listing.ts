@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from '../config';
-import type { DirListing, FolderEntry, ImageEntry } from '../../types';
+import type { CullTag, DirListing, FolderEntry, ImageEntry } from '../../types';
 import { realResolveWithin } from './safePath';
 import { isImage, extOf } from './imageTypes';
 import { isHidden } from './hidden';
@@ -18,11 +18,15 @@ function byName(a: string, b: string): number {
 
 /**
  * List one directory (Business Rules 3, 4, 8): subfolders first, then images,
- * both name-ascending. Hidden/system entries and non-allowlisted files are
+ * both name-ascending. Each image carries its culling tag, if any. Hidden/system entries and non-allowlisted files are
  * skipped. Throws PathError on escape, ENOENT for a missing dir, ENOTDIR if the
  * path points at a file.
  */
-export async function listDir(config: Config, rel: string): Promise<DirListing> {
+export async function listDir(
+  config: Config,
+  rel: string,
+  tagFor: (relPath: string) => CullTag | undefined = () => undefined,
+): Promise<DirListing> {
   const root = config.photosRoot;
   const absDir = realResolveWithin(root, rel);
 
@@ -53,7 +57,9 @@ export async function listDir(config: Config, rel: string): Promise<DirListing> 
     }
     const relFile = toRel(root, absFile);
     const enc = encodeURIComponent(relFile);
+    const tag = tagFor(relFile);
     images.push({
+      ...(tag ? { tag } : {}),
       name,
       path: relFile,
       ext: extOf(name),

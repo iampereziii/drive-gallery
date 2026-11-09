@@ -37,6 +37,7 @@ On startup the server prints the LAN URL to open on your phone.
 | `HOST` | No | `0.0.0.0` | Bind interface — keep `0.0.0.0` for phone access. |
 | `THUMB_CACHE_DIR` | No | `.thumb-cache` | Thumbnail cache. Must be outside `PHOTOS_ROOT`. |
 | `THUMB_MAX_WIDTH` | No | `400` | Thumbnail width in pixels. |
+| `CULL_FILE` | No | `.culls/culls.json` | Where your Like/Maybe/No tags are saved. Must be outside `PHOTOS_ROOT`. |
 
 ## Scripts
 
@@ -48,10 +49,26 @@ On startup the server prints the LAN URL to open on your phone.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest (path-containment + API tests) |
 
+## Narrowing down photos (culling)
+
+1. Open a photo. Tap **No**, **Maybe** or **Like** in the bottom bar (keys `1` `2` `3` on desktop).
+   The tag flashes and the viewer moves to the next photo. Tap the active tag again to clear it.
+2. In a folder, use the filter chips (**To review / Liked / Maybe / No**) for a second pass, e.g. go back
+   through just the Maybes. Tags are saved on the host, so they survive reloads and show on every device.
+3. When you are done, copy your picks off the drive. The app itself never touches the photos:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scriptsapply-culls.ps1 -Dest E:Picks -Tags Like,Maybe -WhatIf   # dry run
+powershell -ExecutionPolicy Bypass -File scriptsapply-culls.ps1 -Dest E:Picks -Tags Like,Maybe          # copy
+```
+
+Photos are copied to `E:PicksLiked<original folders>…` and `E:PicksMaybe…`. Originals stay where
+they are, and re-running skips files that are already copied.
+
 ## Notes
 
 - **Read-only:** the app never modifies the drive. The only writes go to the
-  thumbnail cache, which lives outside `PHOTOS_ROOT`.
+  thumbnail cache and the cull manifest, both outside `PHOTOS_ROOT`.
 - **Open on the LAN:** v1 has no authentication — anyone who can reach the host
   and port can browse. Intended for a trusted home network.
 - See [project-spec.md](../ais/projects/drive-gallery/project-spec.md) for the full spec and business rules.

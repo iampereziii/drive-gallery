@@ -35,11 +35,12 @@ drive-gallery/
     server/
       index.ts             # Express bootstrap; binds HOST:PORT; prints LAN URL
       config.ts            # Reads + validates env
-      routes/              # browse, thumb, image, health
+      routes/              # browse, thumb, image, health, culls
       lib/
         safePath.ts        # Resolve + contain a request path within PHOTOS_ROOT
         imageTypes.ts      # Allowed extensions + MIME
         thumbnailCache.ts  # Generate/lookup cached thumbnails (sharp)
+        cullStore.ts       # Like/Maybe/No tags, persisted to CULL_FILE (outside the drive)
         listing.ts         # Read dir → folders[] + images[], skip hidden/system
     client/
       main.tsx, App.tsx
@@ -49,6 +50,8 @@ drive-gallery/
     types/index.ts        # Shared DirListing, FolderEntry, ImageEntry
   public/                 # Client static assets
   .thumb-cache/           # Generated thumbnails (gitignored)
+  scripts/apply-culls.ps1 # Copies tagged photos to <Dest>\<Liked|Maybe|No>\… (run by hand/Claude, never the server)
+  .culls/                 # Cull manifest (gitignored)
   tests/                  # Vitest + Supertest; path-containment tests
   .env.example
   vite.config.ts
@@ -99,6 +102,7 @@ drive-gallery/
 | `PORT` | No | Listen port. Default `8080`. |
 | `HOST` | No | Bind interface. Default `0.0.0.0` (required for phone access). |
 | `THUMB_CACHE_DIR` | No | Thumbnail cache location. Default `./.thumb-cache`. Must NOT be inside `PHOTOS_ROOT`. |
+| `CULL_FILE` | No | Cull manifest (Like/Maybe/No tags). Default `./.culls/culls.json`. Must NOT be inside `PHOTOS_ROOT`. |
 | `THUMB_MAX_WIDTH` | No | Thumbnail width px. Default `400`. |
 | `ACCESS_TOKEN` | No | Shared secret. Set → gates all routes; unset → open on the LAN. |
 
@@ -109,7 +113,7 @@ Copy `.env.example` → `.env.local`. Never commit `.env.local`.
 ## How to Engage
 
 1. **Path safety is the first rule, always.** Every filesystem access must go through `src/server/lib/safePath.ts`. Never read a path built by concatenating a query param directly. A path that escapes `PHOTOS_ROOT` is a `403`, not a stat.
-2. **Never write to the drive.** No route may open a file under `PHOTOS_ROOT` for writing, ever. The only writes the app makes are thumbnails in `THUMB_CACHE_DIR`.
+2. **Never write to the drive.** No route may open a file under `PHOTOS_ROOT` for writing, ever. The only writes the app makes are thumbnails in `THUMB_CACHE_DIR` and the cull manifest at `CULL_FILE` — both outside the drive. Copying picks is done by `scripts/apply-culls.ps1`, never by the server.
 3. **Bind `0.0.0.0` and advertise the URL.** The point of this app is phone access — don't bind `localhost`, and keep the startup LAN-URL print working.
 4. **Degrade gracefully when the drive is gone.** Unreadable `PHOTOS_ROOT` → `503 DRIVE_UNAVAILABLE` and a UI banner, never a crash or a hang.
 5. **Mobile-first, test at 375px.** The primary client is a phone. Lazy-load the grid; don't fetch 1,000 thumbnails at once.

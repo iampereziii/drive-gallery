@@ -3,8 +3,9 @@ import type { Config } from '../config';
 import { listDir } from '../lib/listing';
 import { sendError, driveAvailable } from '../lib/http';
 import { PathError } from '../lib/safePath';
+import type { CullStore } from '../lib/cullStore';
 
-export function browseRouter(config: Config): Router {
+export function browseRouter(config: Config, culls: CullStore): Router {
   const r = Router();
 
   r.get('/', async (req, res) => {
@@ -14,7 +15,7 @@ export function browseRouter(config: Config): Router {
 
     const rel = typeof req.query.path === 'string' ? req.query.path : '';
     try {
-      const listing = await listDir(config, rel);
+      const listing = await listDir(config, rel, (p) => culls.get(p));
       res.json({ data: listing });
     } catch (err) {
       if (err instanceof PathError) {

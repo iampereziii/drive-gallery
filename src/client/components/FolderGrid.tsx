@@ -2,9 +2,13 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DirListing, ImageEntry } from '../../types';
 import { routeForPath } from '../lib/api';
+import { TAG_META } from '../lib/cull';
 
 interface Props {
   listing: DirListing;
+  /** Images to show — the listing's images after the culling filter. */
+  images: ImageEntry[];
+  /** Index into `images`. */
   onOpenImage: (index: number) => void;
 }
 
@@ -15,7 +19,7 @@ function Thumb({ img, onOpen }: { img: ImageEntry; onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className={`block aspect-square w-full overflow-hidden rounded bg-neutral-900 ${loaded ? '' : 'animate-pulse'}`}
+      className={`relative block aspect-square w-full overflow-hidden rounded bg-neutral-900 ${loaded ? '' : 'animate-pulse'}`}
     >
       <img
         src={img.thumbUrl}
@@ -23,16 +27,26 @@ function Thumb({ img, onOpen }: { img: ImageEntry; onOpen: () => void }) {
         loading="lazy"
         decoding="async"
         onLoad={() => setLoaded(true)}
-        className={`h-full w-full object-cover transition-opacity duration-300 hover:opacity-90 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        className={`h-full w-full object-cover transition-opacity duration-300 hover:opacity-90 ${
+          !loaded ? 'opacity-0' : img.tag === 'no' ? 'opacity-40' : 'opacity-100'
+        }`}
       />
+      {img.tag && (
+        <span
+          className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shadow ${TAG_META[img.tag].badge}`}
+          aria-label={TAG_META[img.tag].label}
+        >
+          {TAG_META[img.tag].symbol}
+        </span>
+      )}
     </button>
   );
 }
 
-export default function FolderGrid({ listing, onOpenImage }: Props) {
-  const { folders, images } = listing;
+export default function FolderGrid({ listing, images, onOpenImage }: Props) {
+  const { folders } = listing;
 
-  if (folders.length === 0 && images.length === 0) {
+  if (folders.length === 0 && listing.images.length === 0) {
     return <p className="mt-12 text-center text-neutral-500">This folder is empty.</p>;
   }
 
@@ -54,6 +68,10 @@ export default function FolderGrid({ listing, onOpenImage }: Props) {
             </li>
           ))}
         </ul>
+      )}
+
+      {listing.images.length > 0 && images.length === 0 && (
+        <p className="mt-8 text-center text-sm text-neutral-500">No photos match this filter.</p>
       )}
 
       {images.length > 0 && (

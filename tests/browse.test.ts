@@ -23,6 +23,7 @@ beforeAll(() => {
     host: '127.0.0.1',
     thumbCacheDir: path.join(os.tmpdir(), `dg-cache-${Date.now()}`),
     thumbMaxWidth: 400,
+    cullFile: path.join(os.tmpdir(), `dg-culls-${Date.now()}`, 'culls.json'),
   };
 });
 

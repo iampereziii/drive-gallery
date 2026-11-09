@@ -6,6 +6,8 @@ import { healthRouter } from './routes/health';
 import { browseRouter } from './routes/browse';
 import { thumbRouter } from './routes/thumb';
 import { imageRouter } from './routes/image';
+import { cullsRouter } from './routes/culls';
+import { CullStore } from './lib/cullStore';
 
 /**
  * Build the Express app for a given config. Kept separate from index.ts so tests
@@ -24,11 +26,16 @@ export function buildApp(config: Config): Express {
     next();
   });
 
+  // Culling tags live in memory, persisted to CULL_FILE (outside the drive).
+  const culls = new CullStore(config.cullFile, config.photosRoot);
+
   const api = express.Router();
+  api.use(express.json({ limit: '16kb' }));
   api.use('/health', healthRouter(config));
-  api.use('/browse', browseRouter(config));
+  api.use('/browse', browseRouter(config, culls));
   api.use('/thumb', thumbRouter(config));
   api.use('/image', imageRouter(config));
+  api.use('/culls', cullsRouter(config, culls));
   app.use('/api', api);
 
   // In production, serve the built SPA from the same process. SPA fallback sends
