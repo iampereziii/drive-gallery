@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isCullTag, type CullManifest, type CullTag } from '../../types';
+import { isCullTag, type CullManifest, type CullSummary, type CullTag } from '../../types';
 
 /**
  * Holds the owner's culling tags in memory and persists them to CULL_FILE.
@@ -48,6 +48,18 @@ export class CullStore {
         this.items[rel] = { tag, taggedAt: typeof taggedAt === 'string' ? taggedAt : '' };
       }
     }
+  }
+
+  /** Drive-wide totals per tag. */
+  summary(): CullSummary {
+    const out: CullSummary = { like: 0, maybe: 0, no: 0 };
+    for (const { tag } of Object.values(this.items)) out[tag] += 1;
+    return out;
+  }
+
+  /** Relative paths currently carrying `tag`. */
+  pathsWith(tag: CullTag): string[] {
+    return Object.keys(this.items).filter((rel) => this.items[rel].tag === tag);
   }
 
   /** Tag for a posix relative path, if any. */

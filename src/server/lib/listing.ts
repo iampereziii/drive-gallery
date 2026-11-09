@@ -7,13 +7,28 @@ import { isImage, extOf } from './imageTypes';
 import { isHidden } from './hidden';
 
 /** Convert an absolute path under root into a posix relative path ("" at root). */
-function toRel(root: string, abs: string): string {
+export function toRel(root: string, abs: string): string {
   return path.relative(root, abs).split(path.sep).join('/');
 }
 
 /** Natural sort so "img2" comes before "img10". */
-function byName(a: string, b: string): number {
+export function byName(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+/** Build the wire entry for one image from its relative path and stat. */
+export function imageEntry(relFile: string, stat: fs.Stats, tag: CullTag | undefined): ImageEntry {
+  const enc = encodeURIComponent(relFile);
+  return {
+    ...(tag ? { tag } : {}),
+    name: relFile.split('/').pop() ?? relFile,
+    path: relFile,
+    ext: extOf(relFile),
+    sizeBytes: stat.size,
+    mtimeMs: stat.mtimeMs,
+    thumbUrl: `/api/thumb?path=${enc}`,
+    fullUrl: `/api/image?path=${enc}`,
+  };
 }
 
 /**
@@ -56,21 +71,37 @@ export async function listDir(
       continue; // vanished between readdir and stat — skip it
     }
     const relFile = toRel(root, absFile);
-    const enc = encodeURIComponent(relFile);
-    const tag = tagFor(relFile);
-    images.push({
-      ...(tag ? { tag } : {}),
-      name,
-      path: relFile,
-      ext: extOf(name),
-      sizeBytes: stat.size,
-      mtimeMs: stat.mtimeMs,
-      thumbUrl: `/api/thumb?path=${enc}`,
-      fullUrl: `/api/image?path=${enc}`,
-    });
+    images.push(imageEntry(relFile, stat, tagFor(relFile)));
   }
 
   const self = toRel(root, absDir);
   const parent = self === '' ? null : toRel(root, path.dirname(absDir));
   return { path: self, parent, folders, images };
+}
+
+/**
+ * Every image currently tagged `tag`, across all folders, in path order.
+ * Each path is re-checked through safePath and stat'ed; entries whose file is
+ * gone, escapes the root, or is no longer an image are skipped (not deleted —
+ * the manifest is left alone).
+ */
+export async function listTagged(config: Config, tag: CullTag, paths: string[]): Promise<ImageEntry[]> {
+  const root = config.photosRoot;
+  const images: ImageEntry[] = [];
+  for (const rel of [...paths].sort(byName)) {
+    let abs: string;
+    try {
+      abs = realResolveWithin(root, rel);
+    } catch {
+      continue;
+    }
+    if (!isImage(abs)) continue;
+    try {
+      const stat = await fs.promises.stat(abs);
+      if (stat.isFile()) images.push(imageEntry(toRel(root, abs), stat, tag));
+    } catch {
+      // file moved/deleted on the drive since it was tagged — skip
+    }
+  }
+  return images;
 }

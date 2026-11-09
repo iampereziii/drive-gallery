@@ -6,22 +6,47 @@ import type { CullStore } from '../lib/cullStore';
 import { sendError, driveAvailable } from '../lib/http';
 import { realResolveWithin, PathError } from '../lib/safePath';
 import { isImage } from '../lib/imageTypes';
-import { isCullTag, type CullUpdate } from '../../types';
+import { listTagged } from '../lib/listing';
+import { isCullTag, type CullSummary, type CullUpdateResult, type TaggedImages } from '../../types';
 
 /**
- * PUT /api/culls — set or clear one image's culling tag.
+ * GET  /api/culls/summary — drive-wide totals per tag.
+ * GET  /api/culls?tag=like — every image with that tag, across all folders.
+ * PUT  /api/culls — set or clear one image's culling tag.
  * Body: { path: string, tag: 'like' | 'maybe' | 'no' | null }.
  * Only CULL_FILE is written; the image itself is only stat'ed, never opened.
  */
 export function cullsRouter(config: Config, store: CullStore): Router {
   const r = Router();
 
+  r.get('/summary', (_req, res) => {
+    const data: CullSummary = store.summary();
+    res.json({ data });
+  });
+
+  r.get('/', async (req, res) => {
+    const tag = req.query.tag;
+    if (!isCullTag(tag)) {
+      return sendError(res, 400, 'INVALID_TAG', 'tag must be "like", "maybe", or "no".');
+    }
+    if (!driveAvailable(config.photosRoot)) {
+      return sendError(res, 503, 'DRIVE_UNAVAILABLE', 'The photo drive is not available. Check that it is connected.');
+    }
+    try {
+      const data: TaggedImages = { tag, images: await listTagged(config, tag, store.pathsWith(tag)) };
+      res.json({ data });
+    } catch (err) {
+      console.error('[culls]', err);
+      return sendError(res, 500, 'INTERNAL', 'Could not list tagged photos.');
+    }
+  });
+
   r.put('/', async (req, res) => {
     if (!driveAvailable(config.photosRoot)) {
       return sendError(res, 503, 'DRIVE_UNAVAILABLE', 'The photo drive is not available. Check that it is connected.');
     }
 
-    const body = (req.body ?? {}) as Partial<Record<keyof CullUpdate, unknown>>;
+    const body = (req.body ?? {}) as { path?: unknown; tag?: unknown };
     if (typeof body.path !== 'string' || !body.path) {
       return sendError(res, 400, 'MISSING_PATH', 'A path is required.');
     }
@@ -59,7 +84,7 @@ export function cullsRouter(config: Config, store: CullStore): Router {
       console.error('[culls]', err);
       return sendError(res, 500, 'INTERNAL', 'Could not save the tag.');
     }
-    const data: CullUpdate = { path: rel, tag };
+    const data: CullUpdateResult = { path: rel, tag, summary: store.summary() };
     res.json({ data });
   });
 

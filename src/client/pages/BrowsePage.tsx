@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import type { CullTag, DirListing, ImageEntry } from '../../types';
-import { fetchListing, pathFromRoute, setCull } from '../lib/api';
+import { Link, useLocation } from 'react-router-dom';
+import type { CullSummary, CullTag, DirListing, ImageEntry } from '../../types';
+import { fetchCullSummary, fetchListing, fetchTagged, pathFromRoute, routeForPath, setCull } from '../lib/api';
 import { FILTERS, matchesFilter, type CullFilter } from '../lib/cull';
 import Breadcrumb from '../components/Breadcrumb';
 import FolderGrid from '../components/FolderGrid';
@@ -17,9 +17,15 @@ interface ViewerState {
   index: number;
 }
 
+/** /likes — every Like from every folder in one grid, for trimming them down. */
+export const LIKES_ROUTE = '/likes';
+
 export default function BrowsePage() {
   const location = useLocation();
-  const relPath = pathFromRoute(location.pathname);
+  const likesMode = location.pathname === LIKES_ROUTE;
+  const relPath = likesMode ? '' : pathFromRoute(location.pathname);
+  /** Changes whenever the page should reload (folder or mode). */
+  const pageKey = likesMode ? LIKES_ROUTE : relPath;
 
   const [listing, setListing] = useState<DirListing | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +33,7 @@ export default function BrowsePage() {
   const [viewer, setViewer] = useState<ViewerState | null>(null);
   const [filter, setFilter] = useState<CullFilter>('all');
   const [toast, setToast] = useState<string | null>(null);
+  const [summary, setSummary] = useState<CullSummary | null>(null);
   const toastTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -34,15 +41,22 @@ export default function BrowsePage() {
     setLoading(true);
     setError(null);
     setViewer(null);
-    setFilter('all');
-    fetchListing(relPath)
+    setFilter(likesMode ? 'like' : 'all');
+    const load: Promise<DirListing> = likesMode
+      ? fetchTagged('like').then((t) => ({ path: '', parent: null, folders: [], images: t.images }))
+      : fetchListing(relPath);
+    fetchCullSummary()
+      .then((s) => active && setSummary(s))
+      .catch(() => undefined); // count is a nice-to-have; the page still works without it
+    load
       .then((d) => active && setListing(d))
       .catch((e: Error) => active && setError(e.message))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [relPath]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageKey]);
 
   useEffect(() => () => {
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
@@ -84,21 +98,56 @@ export default function BrowsePage() {
     );
   };
 
-  /** Optimistic: show the tag immediately, roll back if the host couldn't save it. */
+/** Move one image's contribution in the drive-wide totals from one tag to another. */
+  const shiftSummary = (from: CullTag | undefined, to: CullTag | undefined) =>
+    setSummary((s) => {
+      if (!s) return s;
+      const next = { ...s };
+      if (from) next[from] -= 1;
+      if (to) next[to] += 1;
+      return next;
+    });
+
+  /** Optimistic: show the tag (and count) immediately; the host's totals win when it replies. */
   const onTag = (img: ImageEntry, tag: CullTag | null) => {
     const previous = img.tag;
     patchTag(img.path, tag ?? undefined);
-    setCull(img.path, tag).catch((e: Error) => {
-      patchTag(img.path, previous);
-      showToast(`Couldn’t save tag: ${e.message}`);
-    });
+    shiftSummary(previous, tag ?? undefined);
+    setCull(img.path, tag)
+      .then((r) => setSummary(r.summary))
+      .catch((e: Error) => {
+        patchTag(img.path, previous);
+        shiftSummary(tag ?? undefined, previous);
+        showToast(`Couldn’t save tag: ${e.message}`);
+      });
   };
 
   return (
     <div className="mx-auto max-w-5xl px-3 py-4">
       <header className="space-y-2">
-        <h1 className="text-lg font-semibold tracking-tight">Drive Gallery</h1>
-        <Breadcrumb relPath={relPath} />
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-lg font-semibold tracking-tight">{likesMode ? 'All Likes' : 'Drive Gallery'}</h1>
+          {summary && !likesMode && (
+            <Link
+              to={LIKES_ROUTE}
+              className="shrink-0 rounded-full bg-emerald-500/15 px-3 py-1.5 text-sm font-medium text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25"
+            >
+              ♥ {summary.like} liked ›
+            </Link>
+          )}
+        </div>
+        {likesMode ? (
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-neutral-400">
+            <Link to={routeForPath('')} className="hover:text-neutral-100">‹ Back to folders</Link>
+            {summary && (
+              <span>
+                <span className="text-2xl font-semibold text-emerald-300">♥ {summary.like}</span> liked across all folders
+              </span>
+            )}
+          </div>
+        ) : (
+          <Breadcrumb relPath={relPath} />
+        )}
       </header>
 
       {loading && <p className="mt-12 text-center text-neutral-500">Loading…</p>}
@@ -130,7 +179,11 @@ export default function BrowsePage() {
         </div>
       )}
 
-      {!loading && !error && listing && (
+      {!loading && !error && listing && likesMode && images.length === 0 && (
+        <p className="mt-12 text-center text-neutral-500">No Likes yet — tag photos ♥ Like in the viewer.</p>
+      )}
+
+      {!loading && !error && listing && !(likesMode && images.length === 0) && (
         <FolderGrid
           listing={listing}
           images={filtered}
@@ -145,6 +198,8 @@ export default function BrowsePage() {
           onClose={() => setViewer(null)}
           onChange={(index) => setViewer((v) => (v ? { ...v, index } : v))}
           onTag={onTag}
+          likeCount={summary?.like}
+          showPath={likesMode}
         />
       )}
 

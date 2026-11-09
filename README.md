@@ -55,6 +55,8 @@ On startup the server prints the LAN URL to open on your phone.
    The tag flashes and the viewer moves to the next photo. Tap the active tag again to clear it.
 2. In a folder, use the filter chips (**To review / Liked / Maybe / No**) for a second pass, e.g. go back
    through just the Maybes. Tags are saved on the host, so they survive reloads and show on every device.
+   To trim your Likes, tap **♥ N liked ›** at the top: **All Likes** shows every Like from every folder in one
+   grid, and the ♥ count (also shown in the viewer) drops live as you tag photos No.
 3. When you are done, copy your picks off the drive. The app itself never touches the photos:
 
 ```powershell

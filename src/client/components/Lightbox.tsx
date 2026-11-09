@@ -11,6 +11,10 @@ interface Props {
   onChange: (index: number) => void;
   /** Set or clear (null) the culling tag for an image. */
   onTag: (image: ImageEntry, tag: CullTag | null) => void;
+  /** Drive-wide Like total, shown live in the top bar while trimming. */
+  likeCount?: number;
+  /** Show the folder path instead of just the file name (All Likes view). */
+  showPath?: boolean;
 }
 
 /** How long the chosen tag flashes before the viewer advances. */
@@ -21,7 +25,7 @@ const SHARE_AVAILABLE = canShareFiles();
 const IS_IOS = isIOS();
 
 /** Full-screen viewer with keyboard, button, and swipe navigation. */
-export default function Lightbox({ images, index, onClose, onChange, onTag }: Props) {
+export default function Lightbox({ images, index, onClose, onChange, onTag, likeCount, showPath }: Props) {
   const touchStartX = useRef<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -124,7 +128,20 @@ export default function Lightbox({ images, index, onClose, onChange, onTag }: Pr
       onTouchEnd={onTouchEnd}
     >
       <div className="flex items-center gap-3 px-4 py-3 text-neutral-300">
-        <span className="min-w-0 flex-1 truncate text-sm">{current.name}</span>
+        {showPath && current.path.includes('/') ? (
+          // Folder truncates first so the file name always stays visible.
+          <span className="flex min-w-0 flex-1 text-sm" title={current.path}>
+            <span className="min-w-0 truncate text-neutral-500">{current.path.slice(0, current.path.lastIndexOf('/'))}/</span>
+            <span className="shrink-0">{current.name}</span>
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-sm">{current.name}</span>
+        )}
+        {likeCount !== undefined && (
+          <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300" aria-label={`${likeCount} liked`}>
+            ♥ {likeCount}
+          </span>
+        )}
         <span className="shrink-0 text-xs text-neutral-500">
           {index + 1} / {images.length}
         </span>

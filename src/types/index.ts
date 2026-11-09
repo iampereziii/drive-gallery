@@ -28,10 +28,24 @@ export interface CullManifest {
   items: Record<string, { tag: CullTag; taggedAt: string }>;
 }
 
+/** Drive-wide tag totals (GET /api/culls/summary). */
+export type CullSummary = Record<CullTag, number>;
+
+/** Every image with one tag, across all folders (GET /api/culls?tag=…). */
+export interface TaggedImages {
+  tag: CullTag;
+  images: ImageEntry[];
+}
+
 /** Body of PUT /api/culls. `tag: null` clears the tag. */
 export interface CullUpdate {
   path: string;
   tag: CullTag | null;
+}
+
+/** PUT /api/culls response: the saved tag plus fresh drive-wide totals. */
+export interface CullUpdateResult extends CullUpdate {
+  summary: CullSummary;
 }
 
 export interface ImageEntry {

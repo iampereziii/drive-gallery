@@ -55,7 +55,7 @@ describe('PUT /api/culls', () => {
     const app = buildApp(config);
     const put = await request(app).put('/api/culls').send({ path: 'trip/a.jpg', tag: 'like' });
     expect(put.status).toBe(200);
-    expect(put.body.data).toEqual({ path: 'trip/a.jpg', tag: 'like' });
+    expect(put.body.data).toEqual({ path: 'trip/a.jpg', tag: 'like', summary: { like: 1, maybe: 0, no: 0 } });
 
     const list = await request(app).get('/api/browse').query({ path: 'trip' });
     const byName = Object.fromEntries(
@@ -148,6 +148,60 @@ describe('PUT /api/culls', () => {
     fs.writeFileSync(config.cullFile, '{ not json');
     expect(() => buildApp(config)).toThrow(/CULL_FILE is not valid JSON/);
     expect(fs.readFileSync(config.cullFile, 'utf8')).toBe('{ not json');
+  });
+});
+
+describe('GET /api/culls (all Likes view) and /api/culls/summary', () => {
+  it('returns drive-wide totals, and PUT returns updated totals', async () => {
+    const app = buildApp(config);
+    expect((await request(app).get('/api/culls/summary')).body.data).toEqual({ like: 0, maybe: 0, no: 0 });
+    await request(app).put('/api/culls').send({ path: 'trip/a.jpg', tag: 'like' });
+    const put = await request(app).put('/api/culls').send({ path: 'trip/b.jpg', tag: 'like' });
+    expect(put.body.data.summary).toEqual({ like: 2, maybe: 0, no: 0 });
+    const down = await request(app).put('/api/culls').send({ path: 'trip/a.jpg', tag: 'no' });
+    expect(down.body.data.summary).toEqual({ like: 1, maybe: 0, no: 1 });
+  });
+
+  it('lists every Like across folders, in path order, with tags', async () => {
+    fs.mkdirSync(path.join(root, 'party'));
+    fs.writeFileSync(path.join(root, 'party', 'c.jpg'), 'x');
+    const app = buildApp(config);
+    await request(app).put('/api/culls').send({ path: 'trip/b.jpg', tag: 'like' });
+    await request(app).put('/api/culls').send({ path: 'party/c.jpg', tag: 'like' });
+    await request(app).put('/api/culls').send({ path: 'trip/a.jpg', tag: 'maybe' });
+    const res = await request(app).get('/api/culls').query({ tag: 'like' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.images.map((i: { path: string; tag: string }) => `${i.path}:${i.tag}`)).toEqual([
+      'party/c.jpg:like',
+      'trip/b.jpg:like',
+    ]);
+    expect(res.body.data.images[0].fullUrl).toBe('/api/image?path=party%2Fc.jpg');
+  });
+
+  it('skips Likes whose file has gone, without changing the manifest', async () => {
+    const app = buildApp(config);
+    await request(app).put('/api/culls').send({ path: 'trip/a.jpg', tag: 'like' });
+    await request(app).put('/api/culls').send({ path: 'trip/b.jpg', tag: 'like' });
+    fs.rmSync(path.join(root, 'trip', 'a.jpg'));
+    const res = await request(app).get('/api/culls').query({ tag: 'like' });
+    expect(res.body.data.images.map((i: { path: string }) => i.path)).toEqual(['trip/b.jpg']);
+    expect(readManifest().items['trip/a.jpg'].tag).toBe('like');
+  });
+
+  it('skips a hand-edited manifest entry that escapes the root', async () => {
+    fs.mkdirSync(path.dirname(config.cullFile), { recursive: true });
+    const m: CullManifest = { version: 1, root, items: { '../secret.jpg': { tag: 'like', taggedAt: '' } } };
+    fs.writeFileSync(config.cullFile, JSON.stringify(m));
+    fs.writeFileSync(path.join(path.dirname(root), 'secret.jpg'), 'x');
+    const res = await request(buildApp(config)).get('/api/culls').query({ tag: 'like' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.images).toEqual([]);
+    fs.rmSync(path.join(path.dirname(root), 'secret.jpg'));
+  });
+
+  it('rejects an unknown tag with 400', async () => {
+    const res = await request(buildApp(config)).get('/api/culls').query({ tag: 'love' });
+    expect(res.status).toBe(400);
   });
 });
 

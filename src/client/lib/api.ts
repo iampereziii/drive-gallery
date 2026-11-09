@@ -1,4 +1,4 @@
-import type { CullTag, CullUpdate, DirListing, HealthInfo } from '../../types';
+import type { CullSummary, CullTag, CullUpdate, CullUpdateResult, DirListing, HealthInfo, TaggedImages } from '../../types';
 
 async function getData<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -19,7 +19,7 @@ export function fetchListing(relPath: string): Promise<DirListing> {
 }
 
 /** Set (or clear, with null) one image's culling tag. Saved on the host, not the phone. */
-export async function setCull(path: string, tag: CullTag | null): Promise<CullUpdate> {
+export async function setCull(path: string, tag: CullTag | null): Promise<CullUpdateResult> {
   const body: CullUpdate = { path, tag };
   const res = await fetch('/api/culls', {
     method: 'PUT',
@@ -28,7 +28,17 @@ export async function setCull(path: string, tag: CullTag | null): Promise<CullUp
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
-  return json.data as CullUpdate;
+  return json.data as CullUpdateResult;
+}
+
+/** Drive-wide totals per tag. */
+export function fetchCullSummary(): Promise<CullSummary> {
+  return getData<CullSummary>('/api/culls/summary');
+}
+
+/** Every image with `tag`, across all folders. */
+export function fetchTagged(tag: CullTag): Promise<TaggedImages> {
+  return getData<TaggedImages>(`/api/culls?tag=${tag}`);
 }
 
 export function fetchHealth(): Promise<HealthInfo> {
