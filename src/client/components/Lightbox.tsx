@@ -5,6 +5,7 @@ import { shareImages } from '../lib/share';
 import { TAG_META, goalMet, likesLabel, likesPillClass } from '../lib/cull';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import ThumbStrip from './ThumbStrip';
+import { THUMB_SIZES, THUMB_SIZE_LABEL, readThumbSize, writeThumbSize, type ThumbSize } from '../lib/thumbSize';
 
 interface Props {
   images: ImageEntry[];
@@ -57,6 +58,7 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
   const [flash, setFlash] = useState<CullTag | null>(null);
   const advanceTimer = useRef<number | null>(null);
   const [stripShown, setStripShown] = useState(readStripPref);
+  const [thumbSize, setThumbSize] = useState<ThumbSize>(readThumbSize);
   // Upright phone → row above the tag bar; landscape or wide → column on the left.
   const vertical = useMediaQuery('(orientation: landscape), (min-width: 768px)');
   const current = images[index];
@@ -84,6 +86,14 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
     setStripShown((s) => {
       writeStripPref(!s);
       return !s;
+    });
+
+  /** Cycle the strip thumbnail size S → M → L → S (remembered per device). */
+  const cycleThumbSize = () =>
+    setThumbSize((s) => {
+      const next = THUMB_SIZES[(THUMB_SIZES.indexOf(s) + 1) % THUMB_SIZES.length];
+      writeThumbSize(next);
+      return next;
     });
 
   /** Jump from the strip. Cancels a pending auto-advance so it doesn't move on again. */
@@ -149,7 +159,7 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
   };
 
   const showStrip = stripShown && images.length > 1;
-  const strip = <ThumbStrip images={images} index={index} onSelect={jumpTo} vertical={vertical} />;
+  const strip = <ThumbStrip images={images} index={index} onSelect={jumpTo} vertical={vertical} size={thumbSize} />;
 
   const iconClass = 'h-6 w-6';
   const downloadIcon = (
@@ -223,6 +233,18 @@ export default function Lightbox({ images, index, onClose, onChange, onTag, like
           >
             {downloadIcon}
           </a>
+        )}
+
+        {showStrip && (
+          <button
+            type="button"
+            onClick={cycleThumbSize}
+            className="shrink-0 rounded border border-neutral-600 px-1.5 text-xs font-semibold leading-5 text-neutral-200 hover:border-neutral-300 hover:text-white"
+            aria-label={`Thumbnail size: ${THUMB_SIZE_LABEL[thumbSize]}. Tap to change.`}
+            title={`Thumbnail size: ${THUMB_SIZE_LABEL[thumbSize]} (tap to change)`}
+          >
+            {thumbSize}
+          </button>
         )}
 
         {images.length > 1 && (

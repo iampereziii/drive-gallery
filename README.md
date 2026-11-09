@@ -61,7 +61,9 @@ On startup the server prints the LAN URL to open on your phone.
    The goal is saved on the host with your tags.
    While judging, a **thumbnail strip** shows the photos around the current one (a row above the tag bar on an
    upright phone, a column on the left when sideways or on a wider screen). Tap one to jump to it; the grid
-   button in the viewer's top bar hides or shows it.
+   button in the viewer's top bar hides or shows it. The **S / M / L** button next to it changes the thumbnail
+   size: **L** (the default) is a ~320px judging column on a laptop, showing each whole photo uncropped so you
+   can compare eyes, focus and framing. The next ~20 thumbnails are prepared in the background as you go.
 3. When you are done, copy your picks off the drive. The app itself never touches the photos:
 
 ```powershell
